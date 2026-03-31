@@ -1,0 +1,34 @@
+{
+  "name": "@thoughtproof/arweave-archiver",
+  "version": "0.1.0",
+  "description": "Archive ThoughtProof Epistemic Blocks to Arweave via ar.io Turbo SDK",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "demo": "tsx src/demo.ts",
+    "demo:dry": "tsx src/demo.ts --dry-run",
+    "verify": "tsx src/verify.ts",
+    "keygen": "tsx src/keygen.ts",
+    "test": "tsx src/test-sizes.ts"
+  },
+  "keywords": [
+    "thoughtproof",
+    "arweave",
+    "turbo-sdk",
+    "epistemic-block",
+    "verification"
+  ],
+  "author": "ThoughtProof <raul@thoughtproof.ai>",
+  "license": "MIT",
+  "dependencies": {
+    "@ardrive/turbo-sdk": "^1.41.0",
+    "arweave": "^1.15.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
