@@ -30,7 +30,7 @@ async function main() {
   console.log(`   File:    ${WALLET_PATH}`);
   console.log(`\n⚠️  Keep this file safe — it's your signing key.`);
   console.log(`   Add wallet.json to .gitignore!`);
-  console.log(`\n💡 For free-tier uploads (<100 KiB), no AR tokens needed.`);
+  console.log(`\n💡 Fund with Turbo Credits for production uploads.`);
 }
 
 main().catch(console.error);

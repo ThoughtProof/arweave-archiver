@@ -124,8 +124,7 @@ async function main() {
   console.log(`   Models:     ${sampleBlock.verification.model_consensus.total_models}`);
   console.log(`   Domain:     ${sampleBlock.claim.domain}`);
   console.log(`   Stake:      ${sampleBlock.claim.stakeLevel}`);
-  console.log(`   Size:       ${blockSize} bytes (${(blockSize / 1024).toFixed(2)} KB)`);
-  console.log(`   Free tier:  ✅ (limit: 102,400 bytes)\n`);
+  console.log(`   Size:       ${blockSize} bytes (${(blockSize / 1024).toFixed(2)} KB)\n`);
 
   if (DRY_RUN) {
     console.log("🏜️  DRY RUN — showing what would be uploaded:\n");

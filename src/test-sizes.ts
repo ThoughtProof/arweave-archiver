@@ -101,14 +101,11 @@ function main() {
     { name: "Critical (10 models)", models: 10, speed: "deep", detailed: true },
   ];
 
-  const FREE_LIMIT = 102_400;
-
   const header = [
     "Scenario".padEnd(35),
     "Compact".padStart(10),
     "Pretty".padStart(10),
     "Tags".padStart(8),
-    "Free?".padStart(6),
   ].join(" ");
   console.log(header);
   console.log("─".repeat(75));
@@ -121,23 +118,19 @@ function main() {
     const tagBytes = tags.reduce((sum, t) => sum + t.name.length + t.value.length, 0);
     const compactBytes = Buffer.byteLength(compact, "utf-8");
     const prettyBytes = Buffer.byteLength(pretty, "utf-8");
-    const free = compactBytes < FREE_LIMIT ? "✅" : "❌";
 
     const row = [
       s.name.padEnd(35),
       ((compactBytes / 1024).toFixed(1) + " KB").padStart(10),
       ((prettyBytes / 1024).toFixed(1) + " KB").padStart(10),
       (tagBytes + " B").padStart(8),
-      free.padStart(6),
     ].join(" ");
     console.log(row);
   }
 
   console.log("\n" + "─".repeat(75));
-  const limitKB = (FREE_LIMIT / 1024).toFixed(0);
-  console.log("ar.io Free Tier limit: " + limitKB + " KB (" + FREE_LIMIT.toLocaleString() + " bytes)");
   console.log("Tag budget: 4,096 bytes max");
-  console.log("\n✅ All scenarios well within free tier.");
+  console.log("\n✅ Compact payloads — optimized for efficient Turbo SDK uploads.");
 }
 
 main();

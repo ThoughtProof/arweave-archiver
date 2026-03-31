@@ -2,7 +2,7 @@
  * ThoughtProof Arweave Archiver
  *
  * Archives Epistemic Blocks permanently on Arweave via ar.io Turbo SDK.
- * All blocks (3-11 KB) fall within the free tier (<100 KiB).
+ * Compact payloads (2-11 KB) optimized for efficient Turbo uploads.
  */
 
 import { TurboFactory } from "@ardrive/turbo-sdk";

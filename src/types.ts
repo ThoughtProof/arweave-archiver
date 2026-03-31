@@ -7,7 +7,7 @@
  *   - Deep (7 models):      ~6-7 KB
  *   - Critical (10 models): ~10-11 KB
  *
- * All well within ar.io Free Tier (<100 KiB).
+ * Compact payloads optimized for efficient Turbo SDK uploads.
  */
 
 export interface ModelVerdict {
@@ -77,7 +77,7 @@ export interface ArchiveResult {
   gatewayUrl: string;
   /** GraphQL-queryable URL */
   graphqlUrl: string;
-  /** Cost in Winston Credits (should be "0" for free tier) */
+  /** Cost in Winston Credits */
   cost: string;
   /** Data caches where the item is indexed */
   dataCaches: string[];

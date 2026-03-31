@@ -10,20 +10,20 @@ After ThoughtProof verifies an AI agent's decision (`/v1/check`), the resulting 
 Agent Request → ThoughtProof API → Epistemic Block
                     ↓                       ↓
               Base L2 (compact hash)   Arweave (full proof)
-              ~$0.001/tx               FREE via Turbo SDK
+              ~$0.001/tx               Turbo Credits
               Smart contract ref       Permanent, queryable
 ```
 
 ### Block Sizes
 
-| Speed    | Models | Size (compact) | ar.io Free Tier? |
-|----------|--------|---------------|------------------|
-| Fast     | 3      | ~2 KB         | ✅ Free          |
-| Standard | 5      | ~3-4 KB       | ✅ Free          |
-| Deep     | 7      | ~6-7 KB       | ✅ Free          |
-| Critical | 10     | ~10-11 KB     | ✅ Free          |
+| Speed    | Models | Size (compact) |
+|----------|--------|---------------|
+| Fast     | 3      | ~2 KB         |
+| Standard | 5      | ~3-4 KB       |
+| Deep     | 7      | ~6-7 KB       |
+| Critical | 10     | ~10-11 KB     |
 
-Free tier limit: 100 KiB per upload. All ThoughtProof blocks are well within this.
+Compact payloads optimized for efficient Turbo SDK uploads.
 
 ## Quick Start
 
@@ -114,7 +114,7 @@ Every block is uploaded with queryable tags (GraphQL-compatible):
 
 **Dual-layer storage:**
 - **Base L2**: Compact attestation hash on-chain (~$0.001/tx)
-- **Arweave**: Full Epistemic Block with reasoning (FREE, permanent)
+- **Arweave**: Full Epistemic Block with reasoning (permanent, via Turbo Credits)
 
 ## Development
 
