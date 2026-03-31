@@ -39,7 +39,7 @@ function makeBlock(numModels: number, speed: string, detailedReasoning: boolean)
       source: "agent-0xAbDdE1A06eEBD934fea35D4385cF68F43aCc986d",
       submitted_at: new Date().toISOString(),
       domain: "financial",
-      stakeLevel: numModels <= 5 ? "medium" : numModels <= 7 ? "high" : "critical",
+      stakeLevel: numModels <= 5 ? "medium" : "high",
     },
     verification: {
       verdict: "UNCERTAIN",
@@ -72,7 +72,7 @@ function makeBlock(numModels: number, speed: string, detailedReasoning: boolean)
       receiptId: `rcpt_${createHash("sha256").update(String(numModels)).digest("hex").slice(0, 20)}`,
       signer: "0xAbDdE1A06eEBD934fea35D4385cF68F43aCc986d",
       algorithm: "EdDSA",
-      jwt: "eyJhbGciOiJFZERTQSJ9.eyJ2ZXJkaWN0IjoiVU5DRVJUQUlOIn0.mock-sig-64-bytes-base64-encoded-here",
+      jwt: "demo-header.demo-payload.demo-signature",
       blockHash: "0x" + createHash("sha256").update(String(Date.now())).digest("hex"),
       hash_chain_parent: `eb-prev-${numModels}`,
       timestamp: Math.floor(Date.now() / 1000),
@@ -98,7 +98,6 @@ function main() {
     { name: "Fast (3 models, brief)", models: 3, speed: "fast", detailed: false },
     { name: "Standard (5 models)", models: 5, speed: "standard", detailed: true },
     { name: "Deep (7 models)", models: 7, speed: "deep", detailed: true },
-    { name: "Critical (10 models)", models: 10, speed: "deep", detailed: true },
   ];
 
   const header = [

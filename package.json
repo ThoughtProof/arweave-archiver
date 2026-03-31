@@ -5,13 +5,29 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/archiver.js",
+    "dist/archiver.d.ts",
+    "dist/crypto.js",
+    "dist/crypto.d.ts",
+    "dist/integrity.js",
+    "dist/integrity.d.ts",
+    "dist/types.js",
+    "dist/types.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "demo": "tsx src/demo.ts",
     "demo:dry": "tsx src/demo.ts --dry-run",
     "verify": "tsx src/verify.ts",
     "keygen": "tsx src/keygen.ts",
-    "test": "tsx src/test-sizes.ts"
+    "test:sizes": "tsx src/test-sizes.ts",
+    "test:unit": "node --import tsx --test src/*.test.ts",
+    "test": "npm run test:sizes && npm run test:unit"
   },
   "keywords": [
     "thoughtproof",

@@ -2,10 +2,13 @@
  * ThoughtProof Epistemic Block — the canonical verification record
  * archived permanently on Arweave via ar.io Turbo SDK.
  *
- * Typical sizes:
- *   - Standard (5 models):  ~3 KB
- *   - Deep (7 models):      ~6-7 KB
- *   - Critical (10 models): ~10-11 KB
+ * Typical sizes in the current deployed model:
+ *   - Fast (3 models):      ~1.5-2 KB
+ *   - Standard (5 models):  ~3-4 KB
+ *   - Deep (7 models):      ~4-5 KB
+ *
+ * Note: there is currently no separate `critical` speed tier. Older
+ * examples may still use `critical` as a stakeLevel metadata value.
  *
  * Compact payloads optimized for efficient Turbo SDK uploads.
  */
@@ -87,12 +90,26 @@ export interface ArchiveResult {
   archivedAt: string;
 }
 
+/** Token type for Turbo uploads */
+export type TurboToken = "arweave" | "ethereum" | "base-eth" | "base-usdc" | "ario" | "base-ario";
+
+/** Funding strategy for uploads */
+export type FundingStrategy =
+  | { type: "balance" }              // Use existing Turbo Credits balance
+  | { type: "on-demand"; token: TurboToken; maxAmount?: string }; // Pay per upload
+
 /** Configuration for the archiver */
 export interface ArchiverConfig {
-  /** Path to Arweave JWK wallet file */
+  /** Path to Arweave JWK wallet file (legacy) */
   walletPath?: string;
-  /** Arweave JWK directly */
+  /** Arweave JWK directly (legacy) */
   jwk?: JsonWebKey;
+  /** Ethereum/Base private key (0x-prefixed hex string) — preferred */
+  ethereumKey?: string;
+  /** Token type for Turbo authentication (default: "arweave") */
+  token?: TurboToken;
+  /** Funding strategy (default: { type: "balance" }) */
+  funding?: FundingStrategy;
   /** ar.io gateway URL (default: https://arweave.net) */
   gatewayUrl?: string;
   /** GraphQL endpoint (default: https://arweave.net/graphql) */

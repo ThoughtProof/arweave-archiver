@@ -9,6 +9,8 @@
  */
 
 import { ThoughtProofArchiver } from "./archiver.js";
+import { verifyBlockJwt } from "./crypto.js";
+import { verifyBlockIntegrity } from "./integrity.js";
 import type { EpistemicBlock } from "./types.js";
 
 async function main() {
@@ -17,7 +19,6 @@ async function main() {
   const archiver = new ThoughtProofArchiver({ verbose: true });
 
   if (args.includes("--query")) {
-    // Query mode: find archived blocks
     const verdictIdx = args.indexOf("--verdict");
     const verdict = verdictIdx !== -1
       ? (args[verdictIdx + 1] as "ALLOW" | "BLOCK" | "UNCERTAIN")
@@ -60,7 +61,6 @@ async function main() {
     return;
   }
 
-  // Retrieve mode: fetch a specific block by TX ID
   const txId = args.find((a) => !a.startsWith("--"));
   if (!txId) {
     console.error("Usage:");
@@ -99,10 +99,26 @@ async function main() {
       }
     }
 
+    const integrity = verifyBlockIntegrity(block);
+    console.log(`\n🧮 Claim hash: ${integrity.claimHash.actual}`);
+    if (integrity.blockHash.expected) {
+      console.log(`🧮 Block hash: ${integrity.blockHash.ok ? "MATCH" : "MISMATCH"}`);
+    } else {
+      console.log("🧮 Block hash: skipped — attestation.blockHash missing");
+    }
+
+    if (block.attestation.jwt && block.metadata.jwks_url) {
+      const jwtResult = await verifyBlockJwt(block);
+      console.log(`\n🔐 JWT signature check: ${jwtResult.ok ? "VALID" : "INVALID"} (${jwtResult.keyCount} JWKS key(s) tried)`);
+    } else {
+      console.log("\n🔐 JWT signature check skipped — block is missing attestation.jwt or metadata.jwks_url.");
+    }
+
     console.log("\n✅ Block integrity verified — permanently stored on Arweave.");
   } catch (err: any) {
-    console.error(`❌ Failed to retrieve: ${err.message}`);
-    console.error("   The block may not be indexed yet (can take 5-20 minutes).");
+    console.error(`❌ Failed to retrieve/verify: ${err.message}`);
+    console.error("   The block may not be indexed yet (can take 5-20 minutes).",
+    );
     process.exit(1);
   }
 }

@@ -4,7 +4,7 @@ Permanently archive ThoughtProof Epistemic Blocks on Arweave via the [ar.io Turb
 
 ## What it does
 
-After ThoughtProof verifies an AI agent's decision (`/v1/check`), the resulting **Epistemic Block** — containing the verdict, model consensus, adversarial reasoning, and EdDSA attestation — is uploaded to Arweave for permanent, immutable storage.
+After ThoughtProof verifies an AI agent's decision (`/v1/check`), the resulting **Epistemic Block** — containing the verdict, model consensus, adversarial reasoning, and attestation metadata — is uploaded to Arweave for permanent, immutable storage.
 
 ```
 Agent Request → ThoughtProof API → Epistemic Block
@@ -16,12 +16,15 @@ Agent Request → ThoughtProof API → Epistemic Block
 
 ### Block Sizes
 
+Current ThoughtProof speeds discussed and deployed are:
+
 | Speed    | Models | Size (compact) |
-|----------|--------|---------------|
-| Fast     | 3      | ~2 KB         |
-| Standard | 5      | ~3-4 KB       |
-| Deep     | 7      | ~6-7 KB       |
-| Critical | 10     | ~10-11 KB     |
+|----------|--------|----------------|
+| Fast     | 3      | ~1.5-2 KB      |
+| Standard | 5      | ~3-4 KB        |
+| Deep     | 7      | ~4-5 KB        |
+
+There is **no separate `critical` speed tier** in the current product/pricing model. `critical` may still appear as a historical/example `stakeLevel`, but billing and runtime depth currently map to `fast`, `standard`, and `deep` only.
 
 Compact payloads optimized for efficient Turbo SDK uploads.
 
@@ -33,6 +36,9 @@ npm install
 
 # Generate an Arweave wallet (one-time)
 npm run keygen
+
+# Or copy the sample and fill in your own wallet
+cp wallet.sample.json wallet.json
 
 # Dry run — see what gets uploaded
 npm run demo:dry
@@ -50,11 +56,27 @@ npm run verify -- --query
 npm run verify -- --query --verdict BLOCK --domain financial
 ```
 
+> `wallet.json` is intentionally ignored by git. Keep real wallets out of the repository and use `wallet.sample.json` only as a placeholder template.
+
 ## Usage as a Library
+
+### Ethereum/Base Wallet (recommended)
 
 ```typescript
 import { ThoughtProofArchiver } from "@thoughtproof/arweave-archiver";
 
+const archiver = new ThoughtProofArchiver({
+  ethereumKey: process.env.ETH_PRIVATE_KEY,  // 0x-prefixed
+  token: "base-eth",                          // or "base-usdc", "base-ario"
+  verbose: true,
+});
+
+await archiver.init();
+```
+
+### Arweave JWK (legacy)
+
+```typescript
 const archiver = new ThoughtProofArchiver({
   walletPath: "./wallet.json",
   verbose: true,
@@ -75,6 +97,10 @@ const blocks = await archiver.query({
 
 // Retrieve a specific block
 const block = await archiver.retrieve(arweaveId);
+
+// Verify the embedded JWT against JWKS
+const jwtCheck = await verifyBlockJwt(block);
+console.log(`JWT valid: ${jwtCheck.ok}`);
 ```
 
 ## Tagging Schema
@@ -89,12 +115,12 @@ Every block is uploaded with queryable tags (GraphQL-compatible):
 | `Verdict` | `ALLOW` / `BLOCK` / `UNCERTAIN` | Quick filtering |
 | `Confidence` | `0.87` | Verification confidence |
 | `Claim-Hash` | `sha256:abc123...` | Content-addressable claim ref |
-| `Signer` | `0xAbDd...986d` | EdDSA signer address |
+| `Signer` | `0xAbDd...986d` | Attestation signer address |
 | `Agent-ID` | `erc8004-28388` | ERC-8004 agent reference |
 | `Protocol` | `ERC-8183` | Commerce protocol |
 | `Chain-Parent` | `eb-prev-id` | Hash chain linkage |
 | `Domain` | `financial` | Verification domain |
-| `Stake-Level` | `high` | Risk level |
+| `Stake-Level` | `high` | Risk level / example metadata |
 | `Base-TX` | `0x7890...abcd` | Base L2 tx cross-reference |
 
 ## Architecture
@@ -119,7 +145,7 @@ Every block is uploaded with queryable tags (GraphQL-compatible):
 ## Development
 
 ```bash
-npm run test        # Measure block sizes
+npm run test        # Size checks + unit tests
 npm run build       # Compile TypeScript
 ```
 

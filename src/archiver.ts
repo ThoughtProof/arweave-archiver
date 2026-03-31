@@ -2,7 +2,7 @@
  * ThoughtProof Arweave Archiver
  *
  * Archives Epistemic Blocks permanently on Arweave via ar.io Turbo SDK.
- * Compact payloads (2-11 KB) optimized for efficient Turbo uploads.
+ * Compact payloads (roughly 1.5-5 KB in the current model) optimized for efficient Turbo uploads.
  */
 
 import { TurboFactory } from "@ardrive/turbo-sdk";
@@ -14,9 +14,13 @@ import type {
   ArchiverConfig,
   ArchivedBlockRef,
 } from "./types.js";
+import { computeClaimHash } from "./integrity.js";
 
 /** Current tagging schema version */
 const SCHEMA_VERSION = "1.0.0";
+const VALID_VERDICTS = ["ALLOW", "BLOCK", "UNCERTAIN"] as const;
+const VALID_SPEEDS = ["fast", "standard", "deep"] as const;
+const VALID_STAKE_LEVELS = ["low", "medium", "high", "critical"] as const;
 
 /** Build Arweave tags from an Epistemic Block */
 function buildTags(block: EpistemicBlock, baseTxHash?: string) {
@@ -30,9 +34,7 @@ function buildTags(block: EpistemicBlock, baseTxHash?: string) {
     { name: "Confidence", value: String(block.verification.confidence) },
     {
       name: "Claim-Hash",
-      value:
-        "sha256:" +
-        createHash("sha256").update(block.claim.text).digest("hex").slice(0, 16),
+      value: computeClaimHash(block.claim.text),
     },
     { name: "Signer", value: block.attestation.signer },
     { name: "Agent-ID", value: block.metadata.agent_id },
@@ -64,6 +66,26 @@ function buildTags(block: EpistemicBlock, baseTxHash?: string) {
   return tags;
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function assertConfidence(value: unknown, path: string): asserts value is number {
+  if (!isFiniteNumber(value) || value < 0 || value > 1) {
+    throw new Error(`${path} must be a finite number between 0 and 1`);
+  }
+}
+
+function assertPositiveInteger(value: unknown, path: string): asserts value is number {
+  if (!Number.isInteger(value) || (value as number) < 0) {
+    throw new Error(`${path} must be a non-negative integer`);
+  }
+}
+
 export class ThoughtProofArchiver {
   private turbo: Awaited<ReturnType<typeof TurboFactory.authenticated>> | null = null;
   private config: Required<
@@ -80,50 +102,236 @@ export class ThoughtProofArchiver {
     };
   }
 
-  /** Validate an Epistemic Block has required fields before upload */
+  /** Validate an Epistemic Block has required fields before upload or after retrieval. */
   private validateBlock(block: unknown): asserts block is EpistemicBlock {
     const b = block as Record<string, unknown>;
     if (!b || typeof b !== "object") {
       throw new Error("Block must be a non-null object");
     }
-    if (!b.id || typeof b.id !== "string") {
-      throw new Error("Block must have a string 'id'");
+
+    if (!isNonEmptyString(b.version)) {
+      throw new Error("Block must have a non-empty string 'version'");
+    }
+    if (!isNonEmptyString(b.id)) {
+      throw new Error("Block must have a non-empty string 'id'");
     }
     if (b.type !== "epistemic-block") {
       throw new Error(`Block type must be 'epistemic-block', got '${b.type}'`);
     }
-    const v = b.verification as Record<string, unknown> | undefined;
-    if (!v || !v.verdict || !["ALLOW", "BLOCK", "UNCERTAIN"].includes(v.verdict as string)) {
-      throw new Error("Block must have a valid verification.verdict (ALLOW | BLOCK | UNCERTAIN)");
+
+    const claim = b.claim as Record<string, unknown> | undefined;
+    if (!claim || typeof claim !== "object") {
+      throw new Error("Block must have a claim object");
     }
-    if (!b.attestation || !(b.attestation as Record<string, unknown>).signer) {
+    if (!isNonEmptyString(claim.text)) {
+      throw new Error("Block must have claim.text");
+    }
+    if (!isNonEmptyString(claim.source)) {
+      throw new Error("Block must have claim.source");
+    }
+    if (!isNonEmptyString(claim.submitted_at)) {
+      throw new Error("Block must have claim.submitted_at");
+    }
+    if (claim.domain !== undefined && !isNonEmptyString(claim.domain)) {
+      throw new Error("claim.domain, if present, must be a non-empty string");
+    }
+    if (
+      claim.stakeLevel !== undefined &&
+      !VALID_STAKE_LEVELS.includes(claim.stakeLevel as (typeof VALID_STAKE_LEVELS)[number])
+    ) {
+      throw new Error("claim.stakeLevel must be one of low|medium|high|critical");
+    }
+
+    const verification = b.verification as Record<string, unknown> | undefined;
+    if (!verification || typeof verification !== "object") {
+      throw new Error("Block must have a verification object");
+    }
+    if (
+      !VALID_VERDICTS.includes(
+        verification.verdict as (typeof VALID_VERDICTS)[number]
+      )
+    ) {
+      throw new Error("verification.verdict must be ALLOW | BLOCK | UNCERTAIN");
+    }
+    assertConfidence(verification.confidence, "verification.confidence");
+
+    const consensus = verification.model_consensus as Record<string, unknown> | undefined;
+    if (!consensus || typeof consensus !== "object") {
+      throw new Error("Block must have verification.model_consensus");
+    }
+    assertPositiveInteger(consensus.allow_models, "model_consensus.allow_models");
+    assertPositiveInteger(consensus.block_models, "model_consensus.block_models");
+    assertPositiveInteger(consensus.uncertain_models, "model_consensus.uncertain_models");
+    assertPositiveInteger(consensus.total_models, "model_consensus.total_models");
+
+    const sum =
+      (consensus.allow_models as number) +
+      (consensus.block_models as number) +
+      (consensus.uncertain_models as number);
+    if (sum !== consensus.total_models) {
+      throw new Error(
+        `model_consensus counts must sum to total_models (got ${sum} vs ${consensus.total_models})`
+      );
+    }
+
+    if (!Array.isArray(verification.dissent)) {
+      throw new Error("verification.dissent must be an array of strings");
+    }
+    for (const [i, item] of verification.dissent.entries()) {
+      if (!isNonEmptyString(item)) {
+        throw new Error(`verification.dissent[${i}] must be a non-empty string`);
+      }
+    }
+
+    if (verification.model_verdicts !== undefined) {
+      if (!Array.isArray(verification.model_verdicts)) {
+        throw new Error("verification.model_verdicts must be an array if present");
+      }
+      for (const [i, mv] of verification.model_verdicts.entries()) {
+        if (!mv || typeof mv !== "object") {
+          throw new Error(`model_verdicts[${i}] must be an object`);
+        }
+        const verdict = mv as Record<string, unknown>;
+        if (!isNonEmptyString(verdict.model)) {
+          throw new Error(`model_verdicts[${i}].model must be a non-empty string`);
+        }
+        if (
+          !VALID_VERDICTS.includes(verdict.verdict as (typeof VALID_VERDICTS)[number])
+        ) {
+          throw new Error(`model_verdicts[${i}].verdict must be ALLOW | BLOCK | UNCERTAIN`);
+        }
+        assertConfidence(verdict.confidence, `model_verdicts[${i}].confidence`);
+        if (!isNonEmptyString(verdict.reasoning)) {
+          throw new Error(`model_verdicts[${i}].reasoning must be a non-empty string`);
+        }
+      }
+      if (verification.model_verdicts.length !== consensus.total_models) {
+        throw new Error(
+          `model_verdicts length must match model_consensus.total_models (got ${verification.model_verdicts.length} vs ${consensus.total_models})`
+        );
+      }
+    }
+
+    const pipeline = b.pipeline as Record<string, unknown> | undefined;
+    if (!pipeline || typeof pipeline !== "object") {
+      throw new Error("Block must have a pipeline object");
+    }
+    if (!Array.isArray(pipeline.stages) || pipeline.stages.length === 0) {
+      throw new Error("pipeline.stages must be a non-empty array");
+    }
+    for (const [i, stage] of pipeline.stages.entries()) {
+      if (!isNonEmptyString(stage)) {
+        throw new Error(`pipeline.stages[${i}] must be a non-empty string`);
+      }
+    }
+    assertConfidence(pipeline.model_diversity_index, "pipeline.model_diversity_index");
+    assertConfidence(pipeline.synthesis_audit_score, "pipeline.synthesis_audit_score");
+    if (
+      pipeline.speed !== undefined &&
+      !VALID_SPEEDS.includes(pipeline.speed as (typeof VALID_SPEEDS)[number])
+    ) {
+      throw new Error("pipeline.speed must be one of fast|standard|deep");
+    }
+    if (pipeline.durationMs !== undefined) {
+      assertPositiveInteger(pipeline.durationMs, "pipeline.durationMs");
+    }
+    if (pipeline.cost_usd !== undefined && (!isFiniteNumber(pipeline.cost_usd) || pipeline.cost_usd < 0)) {
+      throw new Error("pipeline.cost_usd must be a non-negative finite number");
+    }
+
+    const attestation = b.attestation as Record<string, unknown> | undefined;
+    if (!attestation || typeof attestation !== "object") {
+      throw new Error("Block must have an attestation object");
+    }
+    if (!isNonEmptyString(attestation.signer)) {
       throw new Error("Block must have attestation.signer");
     }
-    if (!b.metadata || !(b.metadata as Record<string, unknown>).agent_id) {
+    if (!isNonEmptyString(attestation.hash_chain_parent)) {
+      throw new Error("Block must have attestation.hash_chain_parent");
+    }
+    if (!Number.isInteger(attestation.timestamp) || (attestation.timestamp as number) <= 0) {
+      throw new Error("attestation.timestamp must be a positive integer unix timestamp");
+    }
+    if (attestation.receiptId !== undefined && !isNonEmptyString(attestation.receiptId)) {
+      throw new Error("attestation.receiptId, if present, must be a non-empty string");
+    }
+    if (attestation.algorithm !== undefined && !isNonEmptyString(attestation.algorithm)) {
+      throw new Error("attestation.algorithm, if present, must be a non-empty string");
+    }
+    if (attestation.signature !== undefined && !isNonEmptyString(attestation.signature)) {
+      throw new Error("attestation.signature, if present, must be a non-empty string");
+    }
+    if (attestation.jwt !== undefined && !isNonEmptyString(attestation.jwt)) {
+      throw new Error("attestation.jwt, if present, must be a non-empty string");
+    }
+    if (attestation.blockHash !== undefined && !isNonEmptyString(attestation.blockHash)) {
+      throw new Error("attestation.blockHash, if present, must be a non-empty string");
+    }
+
+    const metadata = b.metadata as Record<string, unknown> | undefined;
+    if (!metadata || typeof metadata !== "object") {
+      throw new Error("Block must have a metadata object");
+    }
+    if (!isNonEmptyString(metadata.agent_id)) {
       throw new Error("Block must have metadata.agent_id");
+    }
+    if (!isNonEmptyString(metadata.protocol)) {
+      throw new Error("Block must have metadata.protocol");
+    }
+    if (!isNonEmptyString(metadata.provider)) {
+      throw new Error("Block must have metadata.provider");
+    }
+    if (metadata.cost_usd !== undefined && (!isFiniteNumber(metadata.cost_usd) || metadata.cost_usd < 0)) {
+      throw new Error("metadata.cost_usd must be a non-negative finite number");
+    }
+    if (metadata.api_version !== undefined && !isNonEmptyString(metadata.api_version)) {
+      throw new Error("metadata.api_version, if present, must be a non-empty string");
+    }
+    if (metadata.verifyUrl !== undefined && !isNonEmptyString(metadata.verifyUrl)) {
+      throw new Error("metadata.verifyUrl, if present, must be a non-empty string");
+    }
+    if (metadata.jwks_url !== undefined && !isNonEmptyString(metadata.jwks_url)) {
+      throw new Error("metadata.jwks_url, if present, must be a non-empty string");
     }
   }
 
   /** Initialize the Turbo client. Must be called before archive/query. */
   async init(): Promise<void> {
-    let jwk = this.config.jwk;
+    const token = this.config.token ?? "arweave";
 
-    if (!jwk && this.config.walletPath) {
-      const raw = readFileSync(this.config.walletPath, "utf-8");
-      jwk = JSON.parse(raw);
+    // Preferred: Ethereum/Base private key
+    if (this.config.ethereumKey) {
+      if (this.config.verbose) {
+        console.log(`[archiver] Authenticating with Ethereum wallet (token: ${token})`);
+      }
+      this.turbo = await TurboFactory.authenticated({
+        privateKey: this.config.ethereumKey as any,
+        token: token as any,
+      });
+    } else {
+      // Legacy: Arweave JWK
+      let jwk = this.config.jwk;
+
+      if (!jwk && this.config.walletPath) {
+        const raw = readFileSync(this.config.walletPath, "utf-8");
+        jwk = JSON.parse(raw);
+      }
+
+      if (!jwk) {
+        throw new Error(
+          "No wallet provided. Pass ethereumKey (preferred) or walletPath/jwk (legacy).\n" +
+            "Example: new ThoughtProofArchiver({ ethereumKey: '0x...', token: 'base-eth' })"
+        );
+      }
+
+      if (this.config.verbose) {
+        console.log(`[archiver] Authenticating with Arweave JWK (legacy mode)`);
+      }
+      this.turbo = await TurboFactory.authenticated({
+        privateKey: jwk as any,
+        token: "arweave",
+      });
     }
-
-    if (!jwk) {
-      throw new Error(
-        "No wallet provided. Pass walletPath or jwk in config.\n" +
-          "Generate one with: npm run keygen"
-      );
-    }
-
-    this.turbo = await TurboFactory.authenticated({
-      privateKey: jwk as any,
-      token: "arweave",
-    });
 
     if (this.config.verbose) {
       const balance = await this.turbo.getBalance();
@@ -146,7 +354,6 @@ export class ThoughtProofArchiver {
       throw new Error("Archiver not initialized. Call init() first.");
     }
 
-    // Runtime validation
     this.validateBlock(block);
 
     const data = JSON.stringify(block);
@@ -158,7 +365,6 @@ export class ThoughtProofArchiver {
       console.log(`[archiver] Tags: ${tags.length} tags, ~${this.tagSize(tags)} bytes`);
     }
 
-    // Retry with exponential backoff (3 attempts)
     let lastError: Error | null = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -205,6 +411,10 @@ export class ThoughtProofArchiver {
    * Retrieve an archived Epistemic Block by its Arweave transaction ID.
    */
   async retrieve(arweaveId: string): Promise<EpistemicBlock> {
+    if (!isNonEmptyString(arweaveId)) {
+      throw new Error("arweaveId must be a non-empty string");
+    }
+
     const url = `${this.config.gatewayUrl}/${arweaveId}`;
     const response = await fetch(url);
 
@@ -212,7 +422,9 @@ export class ThoughtProofArchiver {
       throw new Error(`Failed to retrieve block: ${response.status} ${response.statusText}`);
     }
 
-    return (await response.json()) as EpistemicBlock;
+    const block = (await response.json()) as unknown;
+    this.validateBlock(block);
+    return block;
   }
 
   /**
@@ -262,7 +474,7 @@ export class ThoughtProofArchiver {
         query,
         variables: {
           tags: tagFilters,
-          first: filters.limit ?? 10,
+          first: Math.min(Math.max(filters.limit ?? 10, 1), 100),
         },
       }),
     });
@@ -272,9 +484,9 @@ export class ThoughtProofArchiver {
     }
 
     const result = (await response.json()) as {
-      data: {
-        transactions: {
-          edges: Array<{
+      data?: {
+        transactions?: {
+          edges?: Array<{
             node: {
               id: string;
               tags: Array<{ name: string; value: string }>;
@@ -284,11 +496,25 @@ export class ThoughtProofArchiver {
           }>;
         };
       };
+      errors?: Array<{ message?: string }>;
     };
 
-    return result.data.transactions.edges.map((edge) => {
+    if (result.errors?.length) {
+      throw new Error(
+        `GraphQL query returned errors: ${result.errors
+          .map((e) => e.message || "unknown error")
+          .join("; ")}`
+      );
+    }
+
+    const edges = result.data?.transactions?.edges;
+    if (!Array.isArray(edges)) {
+      throw new Error("GraphQL query returned an unexpected response shape");
+    }
+
+    return edges.map((edge) => {
       const tags: Record<string, string> = {};
-      for (const tag of edge.node.tags) {
+      for (const tag of edge.node.tags ?? []) {
         tags[tag.name] = tag.value;
       }
       return {

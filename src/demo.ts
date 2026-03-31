@@ -93,7 +93,7 @@ const sampleBlock: EpistemicBlock = {
     receiptId: `rcpt_${createHash("sha256").update(String(Date.now())).digest("hex").slice(0, 20)}`,
     signer: "0xAbDdE1A06eEBD934fea35D4385cF68F43aCc986d",
     algorithm: "EdDSA",
-    jwt: "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ0aG91Z2h0cHJvb2YuYWkiLCJ2ZXJkaWN0IjoiQUxMT1ciLCJjb25maWRlbmNlIjowLjg3fQ.mock-signature-for-demo",
+    jwt: "demo-header.demo-payload.demo-signature",
     blockHash:
       "0x" +
       createHash("sha256").update(String(Date.now())).digest("hex"),
