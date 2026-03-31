@@ -8,6 +8,16 @@
 import { TurboFactory } from "@ardrive/turbo-sdk";
 import { readFileSync } from "fs";
 import { createHash } from "crypto";
+
+/** Dynamic import of OnDemandFunding to avoid type issues at compile time */
+let OnDemandFundingClass: any = null;
+async function getOnDemandFunding() {
+  if (!OnDemandFundingClass) {
+    const mod = await import("@ardrive/turbo-sdk");
+    OnDemandFundingClass = (mod as any).OnDemandFunding;
+  }
+  return OnDemandFundingClass;
+}
 import type {
   EpistemicBlock,
   ArchiveResult,
@@ -365,13 +375,39 @@ export class ThoughtProofArchiver {
       console.log(`[archiver] Tags: ${tags.length} tags, ~${this.tagSize(tags)} bytes`);
     }
 
+    // Build upload options, including on-demand funding if configured
+    const uploadOpts: Record<string, any> = {
+      data: Buffer.from(data),
+      dataItemOpts: { tags },
+    };
+
+    const funding = this.config.funding;
+    if (funding?.type === "on-demand") {
+      const ODFunding = await getOnDemandFunding();
+      if (!ODFunding) {
+        throw new Error(
+          "OnDemandFunding not available in this version of @ardrive/turbo-sdk. " +
+            "Update to v1.41+ or use { type: 'balance' } funding."
+        );
+      }
+      const opts: Record<string, any> = {
+        topUpBufferMultiplier: 1.2,
+      };
+      if (funding.maxAmount) {
+        opts.maxTokenAmount = funding.maxAmount;
+      }
+      uploadOpts.fundingMode = new ODFunding(opts);
+      if (this.config.verbose) {
+        console.log(
+          `[archiver] Using on-demand funding (token: ${funding.token}, max: ${funding.maxAmount ?? "auto"})`
+        );
+      }
+    }
+
     let lastError: Error | null = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const result = await this.turbo.upload({
-          data: Buffer.from(data),
-          dataItemOpts: { tags },
-        });
+        const result = await (this.turbo.upload as any)(uploadOpts);
 
         const archiveResult: ArchiveResult = {
           arweaveId: result.id,

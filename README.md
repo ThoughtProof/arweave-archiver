@@ -74,6 +74,24 @@ const archiver = new ThoughtProofArchiver({
 await archiver.init();
 ```
 
+### Ethereum/Base with on-demand funding (pay-per-upload)
+
+```typescript
+const archiver = new ThoughtProofArchiver({
+  ethereumKey: process.env.ETH_PRIVATE_KEY,
+  token: "base-eth",
+  funding: {
+    type: "on-demand",
+    token: "base-eth",
+    maxAmount: "1000000000000000",  // max 0.001 ETH per upload
+  },
+  verbose: true,
+});
+
+await archiver.init();
+// Each archive() call now auto-funds from your Base wallet
+```
+
 ### Arweave JWK (legacy)
 
 ```typescript
