@@ -101,7 +101,7 @@ const sampleBlock: EpistemicBlock = {
     timestamp: Math.floor(Date.now() / 1000),
   },
   metadata: {
-    agent_id: "erc8004-28388",
+    agent_id: "erc8004-base-37477",
     protocol: "ERC-8183",
     cost_usd: 0.02,
     provider: "thoughtproof",
